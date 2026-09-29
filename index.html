@@ -27,50 +27,36 @@ function updateOptions(){
   }
 }
 
-// CONFIGURAÇÃO: cole abaixo a URL da implantação do Apps Script terminada em /exec.
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxM_6ECUEUjCXreEjXsjz0i7Yvoxbkf0Yvtcy-108BaDfoMsR7XeUSOelv18vnHqnZQ/exec';
-const INTERVALO_MS = 60000;
-let carregando = false, recebeuDados = false;
-function consultarPlanilha(){
-  return new Promise((resolve,reject)=>{
-    let url;
-    try { url = new URL(APPS_SCRIPT_URL); } catch { reject(new Error('Configure APPS_SCRIPT_URL no index.html com a URL /exec do Apps Script.')); return; }
-    if(url.protocol!=='https:' || url.hostname!=='script.google.com' || !/^\/macros\/s\/[\w-]+\/exec$/.test(url.pathname)){
-      reject(new Error('Use a URL de implantação https://script.google.com/macros/s/.../exec.'));return;
-    }
-    const callback='dashboard_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const script=document.createElement('script');
-    const clean=()=>{clearTimeout(timer);script.remove();delete window[callback];};
-    const timer=setTimeout(()=>{clean();reject(new Error('Tempo de leitura excedido. Confira a implantação e o acesso público do Apps Script.'));},45000);
-    window[callback]=payload=>{clean();resolve(payload);};
-    script.onerror=()=>{clean();reject(new Error('Falha na conexão. Confira a internet e a implantação com acesso para Qualquer pessoa.'));};
-    url.searchParams.set('callback',callback);url.searchParams.set('_',Date.now());
-    script.src=url.href;document.head.appendChild(script);
-  });
-}
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbxM_6ECUEUjCXreEjXsjz0i7Yvoxbkf0Yvtcy-108BaDfoMsR7XeUSOelv18vnHqnZQ/exec';
+let carregando=false,recebeuDados=false;
+function consultarPlanilha(){return new Promise((resolve,reject)=>{
+ const callback='dashboard_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+ const script=document.createElement('script');
+ const clean=()=>{clearTimeout(timer);script.remove();delete window[callback];};
+ const timer=setTimeout(()=>{clean();reject(new Error('A consulta demorou demais. Confira o acesso público da implantação do Apps Script.'));},45000);
+ window[callback]=payload=>{clean();resolve(payload);};
+ script.onerror=()=>{clean();reject(new Error('Não foi possível conectar ao Apps Script. Confira a internet e a implantação.'));};
+ const url=new URL(APPS_SCRIPT_URL);url.searchParams.set('callback',callback);url.searchParams.set('_',Date.now());
+ script.src=url.href;document.head.appendChild(script);
+});}
 async function refreshData(){
-  if(carregando)return;
-  carregando=true;
-  const button=$('refresh'),message=$('refreshMessage');
-  button.disabled=true;button.textContent='Atualizando…';message.textContent='Consultando Google Sheets…';
-  try{
-    const payload=await consultarPlanilha();
-    if(!payload.ok)throw new Error(payload.error||'Falha na leitura da planilha.');
-    if(!['hotel','house','bills','contracts','excluded'].every(k=>Array.isArray(payload.data?.[k])))throw new Error('Resposta incompleta da planilha.');
-    D=payload.data;recebeuDados=true;updateOptions();render();
-    message.textContent='Última consulta: '+new Date(payload.updatedAt).toLocaleString('pt-BR')+'. Atualização automática a cada minuto enquanto esta página estiver visível.';
-  }catch(error){
-    message.textContent=error.message+(recebeuDados?' Exibindo os dados da última consulta bem-sucedida.':' Nenhum dado carregado.');
-    if(!recebeuDados)$('content').innerHTML='<div class="notice">Aguardando conexão com o Google Sheets. Veja a mensagem acima.</div>';
-  }finally{carregando=false;button.disabled=false;button.textContent='Atualizar da planilha';}
+ if(carregando)return;carregando=true;
+ const button=$('refresh'),message=$('refreshMessage');
+ button.disabled=true;button.textContent='Atualizando…';message.textContent='Consultando Google Sheets…';
+ try{
+  const payload=await consultarPlanilha();
+  if(!payload.ok)throw new Error(payload.error||'Falha na leitura da planilha.');
+  if(!['hotel','house','bills','contracts','excluded'].every(k=>Array.isArray(payload.data?.[k])))throw new Error('Resposta incompleta da planilha.');
+  D=payload.data;recebeuDados=true;updateOptions();render();
+  message.textContent='Última consulta: '+new Date(payload.updatedAt).toLocaleString('pt-BR')+'. Atualização automática a cada minuto enquanto a página estiver visível.';
+ }catch(error){
+  message.textContent=error.message+(recebeuDados?' Exibindo dados da última consulta bem-sucedida.':' Nenhum dado carregado.');
+ }finally{carregando=false;button.disabled=false;button.textContent='Atualizar da planilha';}
 }
-$('refresh').onclick=refreshData;
-$('refreshMessage').setAttribute('aria-live','polite');
-updateOptions();
-// Não mostrar zeros como se fossem valores da planilha antes da primeira consulta.
 const renderOriginal=render;
-render=function(){if(recebeuDados)renderOriginal();else $('content').innerHTML='<div class="notice">Aguardando conexão com o Google Sheets.</div>';};
-render();refreshData();
-setInterval(()=>{if(!document.hidden)refreshData();},INTERVALO_MS);
+render=function(){if(recebeuDados)renderOriginal();else $('content').innerHTML='<div class="notice">Aguardando conexão com o Google Sheets. Confira a mensagem acima.</div>';};
+$('refresh').onclick=refreshData;$('refreshMessage').setAttribute('aria-live','polite');
+updateOptions();render();refreshData();
+setInterval(()=>{if(!document.hidden)refreshData();},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshData();});
 </script></body></html>
